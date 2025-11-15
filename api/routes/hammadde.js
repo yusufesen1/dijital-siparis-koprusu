@@ -5,9 +5,10 @@ const db = require("../config/db");
 // 🟣 Hammadde istatistikleri
 router.get("/istatistikler", (req, res) => {
   const sql = `
-    SELECT 
+    SELECT
       COUNT(*) AS toplam,
-      SUM(CASE WHEN stok_miktari / kritik_stok_seviyesi < 0.6 THEN 1 ELSE 0 END) AS kritik
+      SUM(CASE WHEN stok_miktari / kritik_stok_seviyesi < 0.6 THEN 1 ELSE 0 END) AS kritik,
+      ROUND(AVG(stok_miktari), 0) AS ortalamaTuketim
     FROM hammadde
   `;
 
@@ -21,7 +22,7 @@ router.get("/istatistikler", (req, res) => {
     res.json({
       toplam: row.toplam,
       kritik: row.kritik,
-      ortalamaTuketim: 245, // geçici sabit değer
+      ortalamaTuketim: row.ortalamaTuketim || 0,
       tedarikIhtiyaci: row.kritik || 0
     });
   });

@@ -2,21 +2,33 @@ const express = require("express");
 const router = express.Router();
 const db = require("../config/db");
 
-// 📌 SİPARİŞ GETİRME (Filtre destekli)
+// GET /siparisler  (duruma ve/veya bayi_id'ye göre listele)
 router.get("/", (req, res) => {
-  const durum = req.query.durum; // ?durum=Onay Bekliyor
+  const { durum, bayi_id } = req.query;
 
   let sql = `
-    SELECT s.*, b.bayi_adi
+    SELECT 
+      s.*,
+      b.bayi_adi
     FROM siparisler s
     LEFT JOIN bayiler b ON s.bayi_id = b.bayi_id
   `;
 
+  const where = [];
   const params = [];
 
   if (durum && durum !== "Tümü") {
-    sql += " WHERE s.durum = ?";
+    where.push("s.durum = ?");
     params.push(durum);
+  }
+
+  if (bayi_id) {
+    where.push("s.bayi_id = ?");
+    params.push(bayi_id);
+  }
+
+  if (where.length > 0) {
+    sql += " WHERE " + where.join(" AND ");
   }
 
   sql += " ORDER BY s.tarih DESC";
@@ -30,7 +42,7 @@ router.get("/", (req, res) => {
   });
 });
 
-// 📌 Yeni sipariş ekleme (istersen ileride kullanacağız)
+// POST /siparisler  (ileride ihtiyaç olursa)
 router.post("/", (req, res) => {
   const { bayi_id, durum, toplam_tutar } = req.body;
   const tarih = new Date();
@@ -42,43 +54,53 @@ router.post("/", (req, res) => {
 
   db.query(sql, [bayi_id, durum, toplam_tutar, tarih], (err, result) => {
     if (err) {
-      console.error("❌ Eklenemedi:", err);
+      console.error("❌ Sipariş eklenemedi:", err);
       return res.status(500).json({ error: "Veritabanı hatası" });
     }
     res.status(201).json({ message: "Sipariş eklendi", id: result.insertId });
   });
 });
 
-// 📌 Son 7 Günlük Sipariş Trendi
-router.get("/7gunluk", (req, res) => {
-  const sql = `
-    SELECT DATE(tarih) AS gun, COUNT(*) as adet
-    FROM siparisler
-    WHERE tarih >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-    GROUP BY DATE(tarih)
-    ORDER BY gun ASC;
-  `;
+// PUT /siparisler/:id/durum  (durum güncelle)
+router.put("/:id/durum", (req, res) => {
+  const { durum } = req.body;
+  const id = req.params.id;
 
-  db.query(sql, (err, results) => {
-    if (err) return res.status(500).json({ error: "Veritabanı hatası" });
-    res.json(results);
+  const sql = "UPDATE siparisler SET durum = ? WHERE siparis_id = ?";
+
+  db.query(sql, [durum, id], (err, result) => {
+    if (err) {
+      console.error("❌ Durum güncellenemedi:", err);
+      return res.status(500).json({ error: "Veritabanı hatası" });
+    }
+    res.json({ message: "Durum güncellendi" });
   });
 });
 
-// 📌 Sipariş Durum Dağılımı
-router.get("/durumlar", (req, res) => {
+// GET /siparisler/:id/detay  (sipariş detaylarını getir)
+router.get("/:id/detay", (req, res) => {
+  const id = req.params.id;
+
   const sql = `
-    SELECT durum, COUNT(*) AS adet
-    FROM siparisler
-    GROUP BY durum;
+    SELECT
+      sd.siparis_id,
+      sd.urun_id,
+      u.urun_adi,
+      sd.miktar
+    FROM siparis_detay sd
+    LEFT JOIN urunler u ON sd.urun_id = u.urun_id
+    WHERE sd.siparis_id = ?
   `;
 
-  db.query(sql, (err, results) => {
-    if (err) return res.status(500).json({ error: "Veritabanı hatası" });
+  db.query(sql, [id], (err, results) => {
+    if (err) {
+      console.error("❌ Sipariş detayları alınamadı:", err);
+      return res.status(500).json({ error: "Veritabanı hatası" });
+    }
     res.json(results);
   });
 });
-
 
 module.exports = router;
+
 

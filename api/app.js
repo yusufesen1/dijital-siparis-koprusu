@@ -1,53 +1,40 @@
-if (process.env.NODE_ENV != "production")
-  require('dotenv').config();
+// api/app.js
 
-var createError = require('http-errors');
-var express = require('express');
-var path = require('path');
-var cookieParser = require('cookie-parser');
-var logger = require('morgan');
+const express = require("express");
+const cors = require("cors");
+const bodyParser = require("body-parser");
+const path = require("path");
 
-// 📌 app burada oluşturulmalı
-var app = express();
+// Router dosyaları
+const loginRouter = require("./routes/login");
+const siparislerRouter = require("./routes/siparisler");
+const bayilerRouter = require("./routes/bayiler");
+const hammaddeRouter = require("./routes/hammadde");
+const uretimRouter = require("./routes/uretim");
+const fabrikaDashboardRouter = require("./routes/fabrikaDashboard");
 
-const cors = require('cors');
+const app = express();
+
 app.use(cors());
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
-var indexRouter = require('./routes/index');
-var usersRouter = require('./routes/users');
-var bayilerRouter = require('./routes/bayiler');
-var hammaddeRouter = require('./routes/hammadde');
-var siparislerRouter = require("./routes/siparisler");
+// Statik frontend (index.html vs)
+app.use(express.static(path.join(__dirname, "../dijital-siparis-paneli")));
 
-// view engine setup
-app.set('views', path.join(__dirname, 'views'));
-app.set('view engine', 'ejs');
-
-app.use(logger('dev'));
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
-app.use(cookieParser());
-app.use(express.static(path.join(__dirname, 'public')));
-
-// 📌 router bağlantıları app tanımından sonra yapılmalı
-app.use('/', indexRouter);
-app.use('/users', usersRouter);
-app.use('/bayiler', bayilerRouter);
-app.use('/hammadde', hammaddeRouter);
+// Rotalar
+app.use("/login", loginRouter);
 app.use("/siparisler", siparislerRouter);
+app.use("/bayiler", bayilerRouter);
+app.use("/hammadde", hammaddeRouter);
+app.use("/uretim", uretimRouter);
+app.use("/fabrika", fabrikaDashboardRouter);
 
-// catch 404 and forward to error handler
-app.use(function (req, res, next) {
-  next(createError(404));
-});
-
-// error handler
-app.use(function (err, req, res, next) {
-  res.locals.message = err.message;
-  res.locals.error = req.app.get('env') === 'development' ? err : {};
-  res.status(err.status || 500);
-  res.render('error');
+// Varsayılan route
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "../public/index.html"));
 });
 
 module.exports = app;
+
 
