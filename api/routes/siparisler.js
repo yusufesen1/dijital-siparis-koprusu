@@ -50,8 +50,8 @@ router.post("/olustur", (req, res) => {
 
   // 1. Önce siparis tablosuna ekle
   const siparisSql = `
-    INSERT INTO siparisler (bayi_id, durum, toplam_tutar, tarih, teslimat_tarihi)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO siparisler (bayi_id, durum, toplam_tutar, tarih)
+    VALUES (?, ?, ?, ?)
   `;
 
   db.query(siparisSql, [bayi_id, durum, toplam_tutar, tarih, teslimat_tarihi], (err, siparisResult) => {
@@ -148,15 +148,108 @@ router.put("/:id/durum", (req, res) => {
   const { durum } = req.body;
   const id = req.params.id;
 
-  const sql = "UPDATE siparisler SET durum = ? WHERE siparis_id = ?";
+  // Eğer durum "Onaylandı" ise, stok düşürme işlemi yap
+  if (durum === "Onaylandı") {
+    // 1. Sipariş detaylarını al
+    const detaySql = `
+      SELECT urun_id, miktar
+      FROM siparis_detay
+      WHERE siparis_id = ?
+    `;
 
-  db.query(sql, [durum, id], (err, result) => {
-    if (err) {
-      console.error("❌ Durum güncellenemedi:", err);
-      return res.status(500).json({ error: "Veritabanı hatası" });
-    }
-    res.json({ message: "Durum güncellendi" });
-  });
+    db.query(detaySql, [id], (err, detaylar) => {
+      if (err) {
+        console.error("❌ Sipariş detayları alınamadı:", err);
+        return res.status(500).json({ error: "Sipariş detayları alınamadı" });
+      }
+
+      // 2. Her ürün için stok kontrolü ve güncelleme
+      let islemSayisi = 0;
+      let hatalar = [];
+
+      if (detaylar.length === 0) {
+        // Detay yoksa direkt durumu güncelle
+        durumGuncelle();
+        return;
+      }
+
+      detaylar.forEach((detay) => {
+        // Önce mevcut stoğu kontrol et
+        const stokKontrolSql = "SELECT mevcut_stok, urun_adi FROM urunler WHERE urun_id = ?";
+
+        db.query(stokKontrolSql, [detay.urun_id], (err, urunler) => {
+          if (err || !urunler || urunler.length === 0) {
+            hatalar.push(`Ürün bulunamadı (ID: ${detay.urun_id})`);
+            islemSayisi++;
+            kontrolEt();
+            return;
+          }
+
+          const mevcutStok = urunler[0].mevcut_stok;
+          const urunAdi = urunler[0].urun_adi;
+
+          // Stok yeterli mi kontrol et
+          if (mevcutStok < detay.miktar) {
+            hatalar.push(`Yetersiz stok! ${urunAdi}: Mevcut ${mevcutStok}, İstenen ${detay.miktar}`);
+            islemSayisi++;
+            kontrolEt();
+            return;
+          }
+
+          // Stoğu düş
+          const stokGuncellemeSql = `
+            UPDATE urunler
+            SET mevcut_stok = mevcut_stok - ?
+            WHERE urun_id = ?
+          `;
+
+          db.query(stokGuncellemeSql, [detay.miktar, detay.urun_id], (err) => {
+            if (err) {
+              console.error("❌ Stok güncellenemedi:", err);
+              hatalar.push(`Stok güncellenemedi: ${urunAdi}`);
+            } else {
+              console.log(`✅ Stok güncellendi: ${urunAdi} - ${detay.miktar} adet düşürüldü`);
+            }
+            islemSayisi++;
+            kontrolEt();
+          });
+        });
+      });
+
+      function kontrolEt() {
+        if (islemSayisi === detaylar.length) {
+          if (hatalar.length > 0) {
+            // Hata varsa sipariş durumunu güncelleme
+            return res.status(400).json({
+              error: "Stok güncelleme hatası",
+              hatalar: hatalar
+            });
+          } else {
+            // Başarılı ise sipariş durumunu güncelle
+            durumGuncelle();
+          }
+        }
+      }
+    });
+  } else {
+    // Durum "Onaylandı" değilse direkt güncelle
+    durumGuncelle();
+  }
+
+  function durumGuncelle() {
+    const sql = "UPDATE siparisler SET durum = ? WHERE siparis_id = ?";
+
+    db.query(sql, [durum, id], (err, result) => {
+      if (err) {
+        console.error("❌ Durum güncellenemedi:", err);
+        return res.status(500).json({ error: "Veritabanı hatası" });
+      }
+      res.json({
+        message: "Durum güncellendi",
+        stok_guncellendi: durum === "Onaylandı"
+      });
+    });
+  }
 });
 
 // GET /siparisler/:id/detay  (sipariş detaylarını getir)
