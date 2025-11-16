@@ -12,6 +12,7 @@ const bayilerRouter = require("./routes/bayiler");
 const hammaddeRouter = require("./routes/hammadde");
 const uretimRouter = require("./routes/uretim");
 const fabrikaDashboardRouter = require("./routes/fabrikaDashboard");
+const urunlerRouter = require("./routes/urunler");
 
 const app = express();
 
@@ -29,6 +30,7 @@ app.use("/bayiler", bayilerRouter);
 app.use("/hammadde", hammaddeRouter);
 app.use("/uretim", uretimRouter);
 app.use("/fabrika", fabrikaDashboardRouter);
+app.use("/urunler", urunlerRouter);
 
 // Varsayılan route
 app.get("/", (req, res) => {
